@@ -42,10 +42,12 @@ const addCourse = async ({ name, description, is_available_for_subscription, pri
 
     await newCourse.save();
 
+    const allCourses = await courseModel.find().lean()
+
     return {
       message: "تم إضافة الكورس بنجاح",
       statusCode: 201,
-      data: newCourse,
+      data: allCourses,
     };
   } catch (err) {
     console.error(err);
@@ -75,12 +77,12 @@ const updateCourse = async (courseId, body, fileUrl) => {
 
     await courseModel.updateOne({ id: courseId }, { $set: updatedData });
 
-    const updatedCourse = await courseModel.findOne({ id: courseId });
+    const allCourses = await courseModel.find().lean()
 
     return {
       message: "تم تعديل الكورس بنجاح",
       statusCode: 200,
-      data: updatedCourse
+      data: allCourses
     };
 
   } catch (err) {
@@ -89,7 +91,7 @@ const updateCourse = async (courseId, body, fileUrl) => {
   }
 };
 
-const getCourseById = async ({ courseId, user }) => {
+const getCourseById = async ({ courseId }) => {
   try {
     const course = await courseModel.findOne({ id: courseId }).lean();
 
@@ -97,46 +99,19 @@ const getCourseById = async ({ courseId, user }) => {
       return { message: "Course not found", statusCode: 404, data: {} };
     }
 
-    // لو المستخدم مسجل دخول
-    if (user?.userId) {
-      const student = await studentModel.findOne({
-        _id: new ObjectId(user.userId)
-      }).lean();
-
-      if (student) {
-        const hasCourse = student.transactions?.some(
-          tx =>
-            String(tx.courseId) === String(courseId) &&
-            tx.status === "paid"
-        );
-
-        // مشترك → يرجع الكورس كامل
-        if (hasCourse) {
+    course.sections = course.sections.map(section => ({
+      ...section,
+      sectionables: section.sectionables?.map(item => {
+        if (item.sectionable) {
+          const { source, ...restSectionable } = item.sectionable;
           return {
-            message: "Course fetched successfully",
-            statusCode: 200,
-            data: course
+            ...item,
+            sectionable: restSectionable
           };
         }
-      }
-    }
-
-    // غير مشترك → حذف source
-    if (course.sections?.length) {
-      course.sections = course.sections.map(section => ({
-        ...section,
-        sectionables: section.sectionables?.map(item => {
-          if (item.sectionable) {
-            const { source, ...restSectionable } = item.sectionable;
-            return {
-              ...item,
-              sectionable: restSectionable
-            };
-          }
-          return item;
-        })
-      }));
-    }
+        return item;
+      })
+    }));
 
     return {
       message: "Course fetched successfully",
@@ -154,7 +129,6 @@ const getCourseById = async ({ courseId, user }) => {
 const getAllCourses = async () => {
   try {
     const courses = await courseModel.find().lean();
-
 
     return {
       message: "تم جلب جميع الكورسات",
@@ -222,7 +196,9 @@ const addWeek = async (courseId, body) => {
       }
     );
 
-    return { message: "تم الاضافه بنجاح", statusCode: 201, data: newWeek };
+    const allCourses = await courseModel.find().lean()
+
+    return { message: "تم الاضافه بنجاح", statusCode: 201, data: allCourses };
   } catch (err) {
     console.error(err);
     return { message: "خطأ في السيرفر", statusCode: 500, data: {} };
@@ -252,10 +228,12 @@ const updateWeek = async (courseId, weekId, body) => {
       }
     );
 
+    const allCourses = await courseModel.find().lean()
+
     return {
       message: "تم تعديل الأسبوع بنجاح",
       statusCode: 200,
-      data: body
+      data: allCourses
     };
 
   } catch (err) {
@@ -321,10 +299,12 @@ const addSectionableBook = async (courseId, weekId, body, fileName) => {
       }
     );
 
+    const allCourses = await courseModel.find().lean()
+
     return {
       message: "Sectionable added successfully",
       statusCode: 200,
-      data: newSectionable
+      data: allCourses
     };
 
   } catch (err) {
@@ -365,10 +345,12 @@ const updateSectionableBook = async (courseId, weekId, sectionableId, body, file
       }
     );
 
+    const allCourses = await courseModel.find().lean()
+
     return {
       message: "تم تعديل الكتاب بنجاح",
       statusCode: 200,
-      data: updateData
+      data: allCourses
     };
 
   } catch (err) {
@@ -457,7 +439,7 @@ const get_video = async ({ videoId, courseId, sectionId, sectionableId, user }) 
 
     if (!hasCourse) {
       console.log(hasCourse, user.userId);
-      
+
       return { message: "Please Buy A Course", statusCode: 403, data: {} };
     }
 

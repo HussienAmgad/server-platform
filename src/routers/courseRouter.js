@@ -12,6 +12,8 @@ const FormData = require("form-data");
 const courseModel = require("../models/courseModel");
 const { verifyTokenStudent } = require("../middlewares/verifyTokenStudent");
 const { verifyTokenAssistant } = require("../middlewares/verifyTokenAssistant");
+const { default: requireParams } = require("../middlewares/requireParams");
+const { requireStudentAuth } = require("../middlewares/requireStudentAuth");
 
 const router = express.Router();
 
@@ -146,92 +148,112 @@ router.put("/update-course/:courseId", verifyTokenAssistant, upload.single("pict
   }
 });
 
-router.get("/get_course/:id", verifyTokenStudent, async (req, res) => {
-  try {
-    const courseId = parseInt(req.params.id);
+router.get(
+  "/get_course/:id",
+  requireParams(["id"]), // optional لكن يضمن وجود param
+  async (req, res) => {
+    try {
+      const courseId = parseInt(req.params.id);
 
-    if (isNaN(courseId) || !courseId) {
-      return res.status(400).json({ message: "Course ID غير صالح", data: {} });
+      if (isNaN(courseId) || courseId <= 0) {
+        return res.status(400).json({
+          message: "Course ID غير صالح",
+          data: {}
+        });
+      }
+
+      const result = await getCourseById({ courseId });
+
+      return res.status(result.statusCode).json({
+        message: result.message,
+        data: result.data
+      });
+
+    } catch (error) {
+      console.error("Router Error /get_course:", error);
+      return res.status(500).json({
+        message: "Internal Server Error",
+        data: {}
+      });
     }
+  }
+);
 
-    const result = await getCourseById({ courseId, user: req.user });
-
+router.get("/get_all_courses", async (req, res) => {
+  try {
+    const result = await getAllCourses();
     return res.status(result.statusCode).json({
       message: result.message,
       data: result.data,
     });
-
   } catch (err) {
-    console.error("Router Error:", err);
-    res.status(500).json({
-      message: "خطأ في السيرفر",
-      data: {}
-    });
+    console.error("Router Error /get_all_courses:", err);
+    return res.status(500).json({ message: "خطأ في السيرفر", data: {} });
   }
 });
 
-router.get("/get_all_courses", async (req, res) => {
-  try {
-    const response = await getAllCourses();
-    res.status(response.statusCode).json({
-      message: response.message,
-      data: response.data,
-    });
-  } catch (err) {
-    console.error("Router Error:", err);
-    res.status(500).json({
-      message: "خطأ في السيرفر",
-      data: {}
-    });
+router.get(
+  "/courses/:year",
+  requireParams(["year"]),
+  async (req, res) => {
+    try {
+      const year = parseInt(req.params.year);
+      if (isNaN(year) || year <= 0) {
+        return res.status(400).json({
+          message: "يجب إرسال رقم السنة بشكل صحيح",
+          data: {},
+        });
+      }
+
+      const result = await getCoursesByYear({ year });
+      return res.status(result.statusCode).json({
+        message: result.message,
+        data: result.data,
+      });
+
+    } catch (err) {
+      console.error("Router Error /courses/:year:", err);
+      return res.status(500).json({ message: "خطأ في السيرفر", data: {} });
+    }
   }
-});
+);
 
-router.get("/courses/:year", async (req, res) => {
-  try {
-    const { year } = req.params;
+router.get(
+  "/get-book/:courseId/:weekId/:sectionId",
+  requireStudentAuth,
+  requireParams(["courseId", "weekId", "sectionId"]),
+  async (req, res) => {
+    try {
+      const { courseId, weekId, sectionId } = req.params;
 
-    if (isNaN(year)) {
-      return res.status(400).json({
-        message: "يجب إرسال رقم السنة بشكل صحيح",
-        data: {},
+      // تحويل كل القيم لأرقام والتأكد من صحتها
+      const cId = parseInt(courseId);
+      const wId = parseInt(weekId);
+      const sId = parseInt(sectionId);
+
+      if ([cId, wId, sId].some(id => isNaN(id) || id <= 0)) {
+        return res.status(400).json({
+          message: "أحد المعرفات غير صالح",
+          data: {}
+        });
+      }
+
+      const response = await get_book({ courseId: cId, weekId: wId, sectionId: sId, user: req.user });
+
+      return res.status(response.statusCode).json({
+        message: response.message,
+        data: response.data,
+      });
+
+    } catch (err) {
+      console.error("Router Error /get-book:", err);
+      return res.status(500).json({
+        message: "خطأ في السيرفر",
+        data: {}
       });
     }
-
-    const response = await getCoursesByYear({ year });
-
-    res.status(response.statusCode).json({
-      message: response.message,
-      data: response.data,
-    });
-
-  } catch (err) {
-    console.error("Router Error:", err);
-    res.status(500).json({
-      message: "خطأ في السيرفر",
-      data: {}
-    });
   }
-});
-
-router.get("/get-book/:courseId/:weekId/:sectionId", verifyTokenStudent, async (req, res) => {
-  try {
-    const { courseId, weekId, sectionId } = req.params;
-
-    const response = await get_book({ courseId, weekId, sectionId, user: req.user });
-
-    res.status(response.statusCode).json({
-      message: response.message,
-      data: response.data,
-    });
-  } catch (err) {
-    console.error("Router Error:", err);
-    res.status(500).json({
-      message: "خطأ في السيرفر",
-      data: {}
-    });
-  }
-});
-// finished
+);
 
 router.post("/add-week/:courseId", verifyTokenAssistant, async (req, res) => {
   try {
@@ -289,23 +311,23 @@ router.post("/add-sectionable-book/:courseId/:weekId", verifyTokenAssistant, upl
 
 router.put("/update-sectionable-book/:courseId/:weekId/:sectionableId", verifyTokenAssistant, uploadbook.single("file"), async (req, res) => {
 
-    const courseId = parseInt(req.params.courseId);
-    const weekId = parseInt(req.params.weekId);
-    const sectionableId = parseInt(req.params.sectionableId);
+  const courseId = parseInt(req.params.courseId);
+  const weekId = parseInt(req.params.weekId);
+  const sectionableId = parseInt(req.params.sectionableId);
 
-    const result = await updateSectionableBook(
-      courseId,
-      weekId,
-      sectionableId,
-      req.body,
-      req.file ? req.file.filename : null
-    );
+  const result = await updateSectionableBook(
+    courseId,
+    weekId,
+    sectionableId,
+    req.body,
+    req.file ? req.file.filename : null
+  );
 
-    res.status(result.statusCode).json({
-      message: result.message,
-      data: result.data
-    });
-  }
+  res.status(result.statusCode).json({
+    message: result.message,
+    data: result.data
+  });
+}
 );
 
 router.post('/add-sectionable-video/:courseId/:weekId', verifyTokenAssistant, uploadVideo.single("file"), async (req, res) => {
@@ -331,17 +353,27 @@ router.post('/add-sectionable-video/:courseId/:weekId', verifyTokenAssistant, up
     const {
       name,
       description,
-      duration,
       view_limit,
+      duration
     } = req.body;
 
     const file = req.file;
 
-    if (!name || !file) {
-      return res.status(400).json({ error: "name and file are required" });
+    if (!file) {
+      return res.status(400).json({ message: "file are required", data: {} });
     }
-
-    console.log(req.file)
+    if (!name) {
+      return res.status(400).json({ message: "name are required", data: {} });
+    }
+    if (!description) {
+      return res.status(400).json({ message: "description are required", data: {} });
+    }
+    if (!view_limit) {
+      return res.status(400).json({ message: "view limit are required", data: {} });
+    }
+    if (!duration) {
+      return res.status(400).json({ message: "duration are required", data: {} });
+    }
 
     // 1️⃣ إنشاء فيديو جديد في VdoCipher
     const createVideoResponse = await axios.put(
@@ -413,8 +445,9 @@ router.post('/add-sectionable-video/:courseId/:weekId', verifyTokenAssistant, up
       { id: courseId, 'sections.id': weekId },
       { $push: { 'sections.$.sectionables': newSectionable }, $set: { updated_at: new Date().toISOString() } }
     );
+    const allCourses = await courseModel.find().lean()
 
-    res.status(200).json({ message: 'Sectionable video added successfully', data: newSectionable });
+    res.status(200).json({ message: 'Sectionable video added successfully', data: allCourses });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -479,23 +512,45 @@ router.post('/add-sectionable-video/:courseId/:weekId', verifyTokenAssistant, up
 //   }
 // });
 
-router.get('/video/:courseId/:sectionId/:sectionableId/:videoId', verifyTokenStudent, async (req, res) => {
-  
-  try {
-    const { videoId, courseId, sectionId, sectionableId } = req.params;
-    
-    console.log({ videoId, courseId, sectionId, sectionableId, user: req.user });
-    
-    const result = await get_video({ videoId, courseId, sectionId, sectionableId, user: req.user })
-    res.status(result.statusCode).json({
-      message: result.message,
-      data: result.data
-    });
-  } catch (error) {
-    console.error(error.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to get OTP & playback info' });
+router.get(
+  '/video/:courseId/:sectionId/:sectionableId/:videoId',
+  requireStudentAuth,
+  requireParams(["courseId", "sectionId", "sectionableId", "videoId"]),
+  async (req, res) => {
+    try {
+      const { videoId, courseId, sectionId, sectionableId } = req.params;
+
+      // تحويل كل القيم لأرقام والتأكد من صحتها
+      const vId = parseInt(videoId);
+      const cId = parseInt(courseId);
+      const sId = parseInt(sectionId);
+      const sbId = parseInt(sectionableId);
+
+      if ([vId, cId, sId, sbId].some(id => isNaN(id) || id <= 0)) {
+        return res.status(400).json({
+          message: "أحد المعرفات غير صالح",
+          data: {}
+        });
+      }
+
+      console.log({ videoId: vId, courseId: cId, sectionId: sId, sectionableId: sbId, user: req.user });
+
+      const result = await get_video({ videoId: vId, courseId: cId, sectionId: sId, sectionableId: sbId, user: req.user });
+
+      return res.status(result.statusCode).json({
+        message: result.message,
+        data: result.data
+      });
+
+    } catch (error) {
+      console.error("Router Error /video:", error.response?.data || error.message);
+      return res.status(500).json({
+        message: "Failed to get video info",
+        data: {}
+      });
+    }
   }
-});
+);
 
 // router.get('/video/:videoId', verifyTokenStudent, async (req, res) => {
 //   const videoId = req.params.videoId;
@@ -579,7 +634,9 @@ router.post('/add-sectionable-exam/:courseId/:weekId', verifyTokenAssistant, asy
       }
     );
 
-    res.status(200).json({ message: 'Exam metadata added successfully', sectionable_id: sectionableId });
+    const allCourses = await courseModel.find().lean()
+
+    res.status(200).json({ message: 'Exam metadata added successfully', data: allCourses });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

@@ -27,6 +27,7 @@
     "form-data": "^4.0.2",
     "FormData": "^0.10.1",
     "jsonwebtoken": "^9.0.2",
+    "k6": "^0.0.0",
     "mongodb": "^6.16.0",
     "mongoose": "^8.14.3",
     "multer": "^1.4.5-lts.2",

@@ -18,11 +18,21 @@ router.get("/verify", async (req, res) => {
 });
 
 router.get("/", async (req, res) => {
-  const result = await getAllCheckouts();
-  res.status(result.statusCode).json({ message: result.message, data: result.data });
+  try {
+    const result = await getAllCheckouts();
+
+    return res.status(result.statusCode).json({
+      message: result.message,
+      data: result.data
+    });
+
+  } catch (error) {
+    console.error("Router Error /:", error);
+    return res.status(500).json({
+      message: "خطأ في السيرفر",
+      data: {}
+    });
+  }
 });
-
-
-
 
 module.exports = router;

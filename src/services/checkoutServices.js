@@ -190,7 +190,7 @@ const verifyCheckout = async ({ session_id }) => {
 
 const getAllCheckouts = async () => {
     try {
-        const courses = await checkoutModel.find().toArray();
+        const courses = await checkoutModel.find();
         return { statusCode: 200, message: "تم جلب البيانات", data: courses };
     } catch (err) {
         console.error('❌ Error fetching courses:', err);
