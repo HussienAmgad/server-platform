@@ -1,8 +1,10 @@
 const express = require("express");
-const { registerStudent, loginPhoneStudent, loginEmailStudent, studentTransactions, get_waching, studentExam, getProfileStudent } = require("../services/studentServices");
+const { registerStudent, loginPhoneStudent, loginEmailStudent, studentTransactions, get_waching, studentExam, getProfileStudent, getAllStudents } = require("../services/studentServices");
 const { requireStudentAuth } = require("../middlewares/requireStudentAuth");
 const requireBodyFields = require("../middlewares/requireBodyFields");
 const { default: requireParams } = require("../middlewares/requireParams");
+const { verifyTokenAssistant } = require("../middlewares/verifyTokenAssistant");
+const requireQueryParams = require("../middlewares/requireQueryParams");
 
 const router = express.Router();
 
@@ -28,13 +30,38 @@ router.post(
 
       const response = await loginPhoneStudent({ phone, password });
 
-      return res.status(response.statusCode).json({
+      res.status(response.statusCode).json({
         message: response.message,
-        data: response.data
+        data: response.data,
       });
 
     } catch (error) {
       console.error("Router Error /loginphone:", error);
+      return res.status(500).json({
+        message: "Internal Server Error"
+      });
+    }
+  }
+);
+
+router.get(
+  "/allstudents",
+  verifyTokenAssistant,
+  requireQueryParams(["counter", "limit"]),
+  async (req, res) => {
+    try {
+      const counter = Number(req.query.counter)
+      const limit = Number(req.query.limit)
+
+      const response = await getAllStudents({ counter, limit });
+
+      return res.status(response.statusCode).json({
+        message: response.message,
+        data: response.data,
+        meta: response.meta
+      });
+    } catch (error) {
+      console.error("Router Error /allstudents:", error);
       return res.status(500).json({
         message: "Internal Server Error"
       });

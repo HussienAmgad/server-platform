@@ -43,7 +43,7 @@ const startCheckout = async ({ token, courseId, PaymentMethodType }) => {
             return { statusCode: 200, message: "لديك جلسة دفع غير مكتملة", data: { paymentUrl: existing.paymentUrl } };
         }
 
-        const coursefined = await courseModel.findOne({ id: numericCourseId }, { projection: { sections: 0 } });
+        const coursefined = await courseModel.findOne({ id: numericCourseId }).select('-sections');
 
         // إذا الكورس مجاني
         if (parseInt(course.price) === 0) {
@@ -58,7 +58,7 @@ const startCheckout = async ({ token, courseId, PaymentMethodType }) => {
                 status: "paid"
             };
 
-            const paymentUrl = `http://localhost:5174/payment-success?courseId=${numericCourseId}`;
+            const paymentUrl = `http://localhost:3000/payment-success?courseId=${numericCourseId}`;
 
             await studentModel.updateOne({ _id: new ObjectId(userId) }, {
                 $addToSet: {
@@ -78,14 +78,14 @@ const startCheckout = async ({ token, courseId, PaymentMethodType }) => {
                 price_data: {
                     currency: "egp",
                     product_data: { name: course.name, description: course.description },
-                    unit_amount: parseInt(course.price) * 100
+                    unit_amount: Number(course.price) * 100
                 },
                 quantity: 1
             }],
             mode: "payment",
             customer_email: user.email,
-            success_url: `http://localhost:5174/payment-success?session_id={CHECKOUT_SESSION_ID}&courseId=${numericCourseId}`,
-            cancel_url: `http://localhost:5174/payment-cancel?courseId=${numericCourseId}`
+            success_url: `http://localhost:3000/payment-success?session_id={CHECKOUT_SESSION_ID}&courseId=${numericCourseId}`,
+            cancel_url: `http://localhost:3000/payment-cancel?courseId=${numericCourseId}`
         });
 
         const paymentUrl = session.url;
@@ -101,7 +101,7 @@ const startCheckout = async ({ token, courseId, PaymentMethodType }) => {
         });
 
         await newCheckout.save();
-        
+
 
         await studentModel.updateOne({ _id: new ObjectId(userId) }, {
             $push: {
@@ -129,6 +129,7 @@ const verifyCheckout = async ({ session_id }) => {
         if (!session_id) return { statusCode: 400, message: "يجب تقديم session_id", data: {} };
 
         const session = await stripe.checkout.sessions.retrieve(session_id);
+        
         if (session.payment_status !== "paid") {
             return { statusCode: 200, message: "لم يتم الدفع", data: { status: false } };
         }

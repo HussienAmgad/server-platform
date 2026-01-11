@@ -8,6 +8,7 @@ const courseRouter = require("./routers/courseRouter");
 const authRouter = require("./routers/authRouter");
 const checkoutRouter = require("./routers/checkoutRouter");
 const examRouter = require("./routers/examRouter");
+const discountRouter = require("./routers/discountRouter");
 const path = require('path');
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
@@ -17,6 +18,8 @@ const fs = require('fs');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 
+const os = require('os');
+
 const wss = new WebSocket.Server({ port: 8081 }, () => {
   console.log("WebSocket server running on port 8081");
 });
@@ -24,49 +27,6 @@ const wss = new WebSocket.Server({ port: 8081 }, () => {
 const wssExam = new WebSocket.Server({ port: 8082 }, () => {
   console.log("WebSocket server running on port 8082");
 });
-
-const app = express();
-const port = process.env.PORT || 5000;
-
-const uploadDir = path.join(__dirname, 'uploads');
-const uploadDir_exams = path.join(__dirname, 'img-exams');
-const uploadDirBooks = path.join(__dirname, 'books');
-const uploadDirphoto = path.join(__dirname, 'photos');
-app.use('/books', express.static(uploadDirBooks));
-app.use('/img-exams', express.static(uploadDir_exams));
-app.use('/uploads', express.static(uploadDir));
-app.use('/photos', express.static(uploadDirphoto));
-
-
-
-if (!fs.existsSync(uploadDirphoto)) {
-  fs.mkdirSync(uploadDirphoto);
-}
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDirphoto);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  },
-});
-
-const upload = multer({ storage });
-
-
-app.use(
-  cors()
-);
-app.use(express.json());
-
-mongoose
-  .connect(process.env.uri)
-  .then(async () => {
-    console.log("Connected!");
-  })
-  .catch((err) => console.log("Failed to connect", err));
-
 
 wss.on('connection', (ws, req) => {
   console.log('Client connected');
@@ -130,11 +90,61 @@ wssExam.on('connection', (ws, req) => {
   ws.on('close', () => console.log('Client disconnected'));
 });
 
+const app = express();
+const port = process.env.PORT || 5000;
+
+const uploadDir = path.join(__dirname, 'uploads');
+const uploadDir_exams = path.join(__dirname, 'img-exams');
+const uploadDirBooks = path.join(__dirname, 'books');
+const uploadDirphoto = path.join(__dirname, 'photos');
+app.use('/books', express.static(uploadDirBooks));
+app.use('/img-exams', express.static(uploadDir_exams));
+app.use('/uploads', express.static(uploadDir));
+app.use('/photos', express.static(uploadDirphoto));
+
+
+
+if (!fs.existsSync(uploadDirphoto)) {
+  fs.mkdirSync(uploadDirphoto);
+}
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDirphoto);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  },
+});
+
+const upload = multer({ storage });
+
+
+app.use(
+  cors()
+);
+app.use(express.json());
+
+mongoose
+  .connect(process.env.uri)
+  .then(async () => {
+    console.log("Connected!");
+  })
+  .catch((err) => console.log("Failed to connect", err));
+
+
+
 app.use("/student", studentRouter);
 app.use("/course", courseRouter);
 app.use("/auth", authRouter);
 app.use("/checkout", checkoutRouter);
 app.use("/exam", examRouter);
+app.use("/discount", discountRouter);
+
+app.get('/test', async (req, res) => {
+  res.sendStatus(200);
+});
+
 
 app.post("/photos", upload.array("pictures", 20), async (req, res) => {
   try {
@@ -153,7 +163,6 @@ app.post("/photos", upload.array("pictures", 20), async (req, res) => {
 // app.listen(port, '0.0.0.0', () => {
 //   console.log("Running on port " + port);
 // });
-const os = require("os");
 
 app.listen(port, "0.0.0.0", () => {
   const nets = os.networkInterfaces();

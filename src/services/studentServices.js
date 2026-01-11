@@ -105,7 +105,8 @@ const loginPhoneStudent = async ({ phone, password }) => {
             phone: student ? account.studentNumber : account.phone,
         };
 
-        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
+        // const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
+        const token = jwt.sign(payload, JWT_SECRET);
 
         return {
             message: "تم تسجيل الدخول بنجاح",
@@ -152,7 +153,8 @@ const loginEmailStudent = async ({ email, password }) => {
             phone: student ? account.studentNumber : account.phone,
         };
 
-        const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
+        // const token = jwt.sign(payload, JWT_SECRET, { expiresIn: "1h" });
+        const token = jwt.sign(payload, JWT_SECRET);
 
         return {
             message: "تم تسجيل الدخول بنجاح",
@@ -571,6 +573,49 @@ const getProfileStudent = async (user) => {
     }
 };
 
+const getAllStudents = async ({ counter, limit }) => {
+    try {
+
+        const allStudents = await studentModel.find().skip((counter - 1) * limit).limit(limit).lean();
+        const totalStudents = await studentModel.countDocuments();
+
+        const allCourseIds = [
+            ...new Set(
+                allStudents.flatMap(s => (s.enrolledCourses || []).map(Number))
+            )
+        ];
 
 
-module.exports = { getProfileStudent, updateAnswer, studentExam, get_waching, updateVideoWatch, registerStudent, loginPhoneStudent, loginEmailStudent, studentTransactions };
+        const courses = await courseModel.find({
+            id: { $in: allCourseIds }
+        }).lean();
+
+        const courseMap = new Map(
+            courses.map(c => [c.id, c])
+        );
+
+        allStudents.forEach(student => {
+            student.enrolledCourses = student.enrolledCourses.map(
+                id => courseMap.get(Number(id))
+            );
+        });
+
+        return {
+            statusCode: 200,
+            message: "Success",
+            data: allStudents,
+            meta: {
+                total: totalStudents,
+                counter: counter,
+                limit: limit,
+                totalPages: Math.ceil(totalStudents / limit)
+            }
+        };
+    } catch (err) {
+        console.error(err);
+        return { message: "خطأ في السيرفر", statusCode: 500, data: {} };
+    }
+};
+
+
+module.exports = { getAllStudents, getProfileStudent, updateAnswer, studentExam, get_waching, updateVideoWatch, registerStudent, loginPhoneStudent, loginEmailStudent, studentTransactions };

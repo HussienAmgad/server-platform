@@ -119,7 +119,9 @@ router.post('/add-exam/:courseId/:weekId/:sectionableId', upload_img_exams.any()
             }
         );
 
-        res.status(200).json({ message: 'Exam added successfully with questions', exam: updatedExam });
+        const allcourses = await courseModel.find();
+
+        res.status(200).json({ message: 'Exam added successfully with questions', data: allcourses });
     } catch (error) {
         console.error('Error while adding exam:', error);
         res.status(500).json({ message: 'Server error', error: error.message });

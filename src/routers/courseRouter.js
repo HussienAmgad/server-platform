@@ -1,12 +1,12 @@
 const express = require("express");
-const { addCourse, getAllCourses, getCoursesByYear, addWeek, addSectionableBook, updateSectionableBook, updateWeek, updateCourse, getCourseById, get_book, uploadVideoService, get_video } = require("../services/courseServices");
+const { addCourse, getAllCourses, getCoursesByYear, addWeek, addSectionableBook, updateSectionableBook, updateWeek, updateCourse, getCourseById, get_book, uploadVideoService, get_video, deleteweek, deletecontent } = require("../services/courseServices");
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { Upload } = require('@aws-sdk/lib-storage');
-
+const tus = require("tus-js-client");
 const axios = require("axios");
 const FormData = require("form-data");
 const courseModel = require("../models/courseModel");
@@ -14,6 +14,7 @@ const { verifyTokenStudent } = require("../middlewares/verifyTokenStudent");
 const { verifyTokenAssistant } = require("../middlewares/verifyTokenAssistant");
 const { default: requireParams } = require("../middlewares/requireParams");
 const { requireStudentAuth } = require("../middlewares/requireStudentAuth");
+const requireBodyFields = require("../middlewares/requireBodyFields");
 
 const router = express.Router();
 
@@ -126,7 +127,7 @@ router.post('/add-course', verifyTokenAssistant, upload.single('picture'), async
 });
 
 router.put("/update-course/:courseId", verifyTokenAssistant, upload.single("picture"), async (req, res) => {
-  const courseId = parseInt(req.params.courseId);
+  const courseId = Number(req.params.courseId);
 
   try {
 
@@ -148,12 +149,14 @@ router.put("/update-course/:courseId", verifyTokenAssistant, upload.single("pict
   }
 });
 
-router.get(
+router.post(
   "/get_course/:id",
-  requireParams(["id"]), // optional لكن يضمن وجود param
+  requireBodyFields(["userId"]),
+  requireParams(["id"]),
   async (req, res) => {
     try {
-      const courseId = parseInt(req.params.id);
+      const courseId = Number(req.params.id);
+      const { userId } = req.body; // ✅ هنا تجيب userId من الجسم
 
       if (isNaN(courseId) || courseId <= 0) {
         return res.status(400).json({
@@ -162,7 +165,7 @@ router.get(
         });
       }
 
-      const result = await getCourseById({ courseId });
+      const result = await getCourseById({ courseId, userId });
 
       return res.status(result.statusCode).json({
         message: result.message,
@@ -178,6 +181,7 @@ router.get(
     }
   }
 );
+
 
 router.get("/get_all_courses", async (req, res) => {
   try {
@@ -197,7 +201,7 @@ router.get(
   requireParams(["year"]),
   async (req, res) => {
     try {
-      const year = parseInt(req.params.year);
+      const year = Number(req.params.year);
       if (isNaN(year) || year <= 0) {
         return res.status(400).json({
           message: "يجب إرسال رقم السنة بشكل صحيح",
@@ -227,9 +231,9 @@ router.get(
       const { courseId, weekId, sectionId } = req.params;
 
       // تحويل كل القيم لأرقام والتأكد من صحتها
-      const cId = parseInt(courseId);
-      const wId = parseInt(weekId);
-      const sId = parseInt(sectionId);
+      const cId = Number(courseId);
+      const wId = Number(weekId);
+      const sId = Number(sectionId);
 
       if ([cId, wId, sId].some(id => isNaN(id) || id <= 0)) {
         return res.status(400).json({
@@ -257,7 +261,7 @@ router.get(
 
 router.post("/add-week/:courseId", verifyTokenAssistant, async (req, res) => {
   try {
-    const courseId = parseInt(req.params.courseId);
+    const courseId = Number(req.params.courseId);
 
     const response = await addWeek(courseId, req.body);
 
@@ -271,9 +275,34 @@ router.post("/add-week/:courseId", verifyTokenAssistant, async (req, res) => {
   }
 });
 
+router.delete("/delete-content/:courseId/:weekId/:sectionableId", requireParams(["courseId", "weekId", "sectionableId"]), verifyTokenAssistant, async (req, res) => {
+  const courseId = Number(req.params.courseId);
+  const weekId = Number(req.params.weekId);
+  const sectionableId = Number(req.params.sectionableId);
+
+  const result = await deletecontent(courseId, weekId, sectionableId);
+
+  res.status(result.statusCode).json({
+    message: result.message,
+    data: result.data
+  });
+});
+
+router.delete("/delete-week/:courseId/:weekId", verifyTokenAssistant, async (req, res) => {
+  const courseId = Number(req.params.courseId);
+  const weekId = Number(req.params.weekId);
+
+  const result = await deleteweek(courseId, weekId);
+
+  res.status(result.statusCode).json({
+    message: result.message,
+    data: result.data
+  });
+});
+
 router.put("/update-week/:courseId/:weekId", verifyTokenAssistant, async (req, res) => {
-  const courseId = parseInt(req.params.courseId);
-  const weekId = parseInt(req.params.weekId);
+  const courseId = Number(req.params.courseId);
+  const weekId = Number(req.params.weekId);
 
   const result = await updateWeek(courseId, weekId, req.body);
 
@@ -285,8 +314,8 @@ router.put("/update-week/:courseId/:weekId", verifyTokenAssistant, async (req, r
 
 router.post("/add-sectionable-book/:courseId/:weekId", verifyTokenAssistant, uploadbook.single("file"), async (req, res) => {
   try {
-    const courseId = parseInt(req.params.courseId);
-    const weekId = parseInt(req.params.weekId);
+    const courseId = Number(req.params.courseId);
+    const weekId = Number(req.params.weekId);
 
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
@@ -311,9 +340,9 @@ router.post("/add-sectionable-book/:courseId/:weekId", verifyTokenAssistant, upl
 
 router.put("/update-sectionable-book/:courseId/:weekId/:sectionableId", verifyTokenAssistant, uploadbook.single("file"), async (req, res) => {
 
-  const courseId = parseInt(req.params.courseId);
-  const weekId = parseInt(req.params.weekId);
-  const sectionableId = parseInt(req.params.sectionableId);
+  const courseId = Number(req.params.courseId);
+  const weekId = Number(req.params.weekId);
+  const sectionableId = Number(req.params.sectionableId);
 
   const result = await updateSectionableBook(
     courseId,
@@ -332,8 +361,8 @@ router.put("/update-sectionable-book/:courseId/:weekId/:sectionableId", verifyTo
 
 router.post('/add-sectionable-video/:courseId/:weekId', verifyTokenAssistant, uploadVideo.single("file"), async (req, res) => {
   try {
-    const courseId = parseInt(req.params.courseId);
-    const weekId = parseInt(req.params.weekId);
+    const courseId = Number(req.params.courseId);
+    const weekId = Number(req.params.weekId);
 
     const course = await courseModel.findOne({ id: courseId });
     if (!course) return res.status(404).json({ message: 'Course not found' });
@@ -417,9 +446,9 @@ router.post('/add-sectionable-video/:courseId/:weekId', verifyTokenAssistant, up
       id: sectionableId,
       name: name || '',
       description: description || '',
-      duration: parseInt(duration),
+      duration: Number(duration),
       source: videoId, // videoId
-      view_limit: parseInt(view_limit) || 3,
+      view_limit: Number(view_limit) || 3,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       deleted_at: null,
@@ -521,19 +550,10 @@ router.get(
       const { videoId, courseId, sectionId, sectionableId } = req.params;
 
       // تحويل كل القيم لأرقام والتأكد من صحتها
-      const vId = parseInt(videoId);
-      const cId = parseInt(courseId);
-      const sId = parseInt(sectionId);
-      const sbId = parseInt(sectionableId);
-
-      if ([vId, cId, sId, sbId].some(id => isNaN(id) || id <= 0)) {
-        return res.status(400).json({
-          message: "أحد المعرفات غير صالح",
-          data: {}
-        });
-      }
-
-      console.log({ videoId: vId, courseId: cId, sectionId: sId, sectionableId: sbId, user: req.user });
+      const vId = videoId
+      const cId = courseId
+      const sId = sectionId
+      const sbId = sectionableId
 
       const result = await get_video({ videoId: vId, courseId: cId, sectionId: sId, sectionableId: sbId, user: req.user });
 
@@ -580,8 +600,8 @@ router.get(
 
 router.post('/add-sectionable-exam/:courseId/:weekId', verifyTokenAssistant, async (req, res) => {
   try {
-    const courseId = parseInt(req.params.courseId);
-    const weekId = parseInt(req.params.weekId);
+    const courseId = Number(req.params.courseId);
+    const weekId = Number(req.params.weekId);
 
     const course = await courseModel.findOne({ id: courseId });
     if (!course) return res.status(404).json({ message: 'Course not found' });
@@ -634,9 +654,7 @@ router.post('/add-sectionable-exam/:courseId/:weekId', verifyTokenAssistant, asy
       }
     );
 
-    const allCourses = await courseModel.find().lean()
-
-    res.status(200).json({ message: 'Exam metadata added successfully', data: allCourses });
+    res.status(200).json({ message: 'Exam metadata added successfully', data: newSectionable });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

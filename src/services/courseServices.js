@@ -8,6 +8,7 @@ const FormData = require("form-data");
 const Busboy = require("busboy");
 const { PassThrough } = require("stream");
 const studentModel = require("../models/studentModel");
+const examModel = require("../models/examModel");
 
 const addCourse = async ({ name, description, is_available_for_subscription, price, year, first_free_video, picture }) => {
   try {
@@ -91,7 +92,7 @@ const updateCourse = async (courseId, body, fileUrl) => {
   }
 };
 
-const getCourseById = async ({ courseId }) => {
+const getCourseById = async ({ courseId, userId }) => {
   try {
     const course = await courseModel.findOne({ id: courseId }).lean();
 
@@ -99,19 +100,46 @@ const getCourseById = async ({ courseId }) => {
       return { message: "Course not found", statusCode: 404, data: {} };
     }
 
-    course.sections = course.sections.map(section => ({
-      ...section,
-      sectionables: section.sectionables?.map(item => {
-        if (item.sectionable) {
-          const { source, ...restSectionable } = item.sectionable;
+    // لو المستخدم مسجل دخول
+    if (userId) {
+      const student = await studentModel.findOne({
+        _id: new ObjectId(userId)
+      }).lean();
+
+      if (student) {
+        const hasCourse = student.transactions?.some(
+          tx =>
+            String(tx.courseId) === String(courseId) &&
+            tx.status === "paid"
+        );
+
+        // مشترك → يرجع الكورس كامل
+        if (hasCourse) {
           return {
-            ...item,
-            sectionable: restSectionable
+            message: "Course fetched successfully",
+            statusCode: 200,
+            data: course
           };
         }
-        return item;
-      })
-    }));
+      }
+    }
+
+    // غير مشترك → حذف source
+    if (course.sections?.length) {
+      course.sections = course.sections.map(section => ({
+        ...section,
+        sectionables: section.sectionables?.map(item => {
+          if (item.sectionable) {
+            const { source, ...restSectionable } = item.sectionable;
+            return {
+              ...item,
+              sectionable: restSectionable
+            };
+          }
+          return item;
+        })
+      }));
+    }
 
     return {
       message: "Course fetched successfully",
@@ -124,7 +152,6 @@ const getCourseById = async ({ courseId }) => {
     return { message: "خطأ في السيرفر", statusCode: 500, data: {} };
   }
 };
-
 
 const getAllCourses = async () => {
   try {
@@ -160,7 +187,6 @@ const getCoursesByYear = async ({ year }) => {
     return { message: "خطأ في السيرفر", statusCode: 500, data: {} };
   }
 };
-
 
 const addWeek = async (courseId, body) => {
   try {
@@ -204,6 +230,76 @@ const addWeek = async (courseId, body) => {
     return { message: "خطأ في السيرفر", statusCode: 500, data: {} };
   }
 }
+
+const deleteweek = async (courseId, weekId) => {
+  try {
+    const course = await courseModel.findOne({ id: courseId });
+    if (!course) {
+      return { message: "Course not found", statusCode: 404, data: {} };
+    }
+
+    const section = course.sections.filter((week) => week.id === weekId)    
+
+    if (section[0].sectionables.length != 0) {
+      return {
+        message: "من فضلك احذف الدروس الذي بداخل الأسبوع",
+        statusCode: 400,
+        data: {}
+      };
+    }
+
+    course.sections = course.sections.filter((week) => week.id !== weekId);
+    await course.save();
+
+    const allCourses = await courseModel.find().lean();
+
+    return {
+      message: "تم تعديل الأسبوع بنجاح",
+      statusCode: 200,
+      data: allCourses
+    };
+
+  } catch (err) {
+    console.error(err);
+    return { message: "خطأ في السيرفر", statusCode: 500, data: {} };
+  }
+};
+
+const deletecontent = async (courseId, weekId, sectionableId) => {
+  try {
+    const course = await courseModel.findOne({ id: courseId });
+    if (!course) {
+      return { message: "Course not found", statusCode: 404, data: {} };
+    }
+
+    let section = course.sections.find(section => section.id === weekId);
+    if (!section) {
+      return { message: "Week not found", statusCode: 404, data: {} };
+    }
+
+    let sectionable = section.sectionables.find(s => s.id === sectionableId);
+    if (!sectionable) {
+      return { message: "Content not found", statusCode: 404, data: {} };
+    }
+
+    // حذف الـ sectionable
+    section.sectionables = section.sectionables.filter(sec => sec.id !== sectionableId);
+
+    await course.save();
+
+    const allCourses = await courseModel.find().lean()
+
+    return {
+      message: "تم حذف المحتوى بنجاح",
+      statusCode: 200,
+      data: allCourses
+    };
+
+  } catch (err) {
+    console.error(err);
+    return { message: "خطأ في السيرفر", statusCode: 500, data: {} };
+  }
+};
 
 const updateWeek = async (courseId, weekId, body) => {
   try {
@@ -490,4 +586,4 @@ const get_video = async ({ videoId, courseId, sectionId, sectionableId, user }) 
 };
 
 
-module.exports = { get_video, get_book, addCourse, updateCourse, getCourseById, getCoursesByYear, getAllCourses, addWeek, updateWeek, addSectionableBook, updateSectionableBook };
+module.exports = { deletecontent, deleteweek, get_video, get_book, addCourse, updateCourse, getCourseById, getCoursesByYear, getAllCourses, addWeek, updateWeek, addSectionableBook, updateSectionableBook };

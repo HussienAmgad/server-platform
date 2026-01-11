@@ -29,7 +29,6 @@ const transactionSchema = new mongoose.Schema({
 
 const viewsSchema = new mongoose.Schema({
   courseId: { type: Number, required: true },
-  courseId: { type: Number, required: true },
   sectionId: { type: Number, required: true },
   sectionableId: { type: Number, required: true },
   timewhatching: { type: Number },
