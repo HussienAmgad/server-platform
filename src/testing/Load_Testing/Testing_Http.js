@@ -174,7 +174,7 @@ export let options = {
 };
 
 export default function () {
-    let res = http.get("https://server-platform-hussien.freeddns.org/test", {
+    let res = http.get("https://server-platform-gilt.vercel.app/test", {
         headers: { "Content-Type": "application/json" },
         timeout: "60s",  // بدل default
     });

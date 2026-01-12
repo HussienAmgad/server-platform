@@ -9,6 +9,7 @@ const authRouter = require("./routers/authRouter");
 const checkoutRouter = require("./routers/checkoutRouter");
 const examRouter = require("./routers/examRouter");
 const discountRouter = require("./routers/discountRouter");
+const assistantRouter = require("./routers/assistantRouter");
 const path = require('path');
 const WebSocket = require('ws');
 const jwt = require('jsonwebtoken');
@@ -140,6 +141,7 @@ app.use("/auth", authRouter);
 app.use("/checkout", checkoutRouter);
 app.use("/exam", examRouter);
 app.use("/discount", discountRouter);
+app.use("/assistant", assistantRouter);
 
 app.get('/test', async (req, res) => {
   res.sendStatus(200);
@@ -148,7 +150,7 @@ app.get('/test', async (req, res) => {
 
 app.post("/photos", upload.array("pictures", 20), async (req, res) => {
   try {
-    console.log(req.files); // هنا مصفوفة الصور
+    console.log(req.files);
     res.status(200).json({
       message: "Multiple photos uploaded successfully",
       files: req.files
